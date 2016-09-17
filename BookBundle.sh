@@ -46,6 +46,9 @@ while getopts ":p:o:vk" arg; do
 	k)
 	    KEEP_BOOKLET_FLG='y'
 	    ;;
+	t)
+	    # Placeholder for trim option
+	    ;;
         *)
             usage
             ;;
