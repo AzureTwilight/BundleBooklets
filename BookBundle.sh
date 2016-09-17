@@ -7,6 +7,25 @@
 
 function usage(){echo "BookletBundle <-povk> Filename.pdf"}
 
+function createBooklet(){
+    pdf=$1
+    start=$2
+    end=$3
+    paper=$4
+    
+    # Split PDF into Odd Even parts
+    pdftk "$pdf" cat ${start}-${end}odd output tmp_OddPart.pdf
+    pdftk "$pdf" cat ${start}-${end}even output tmp_EvenPart.pdf
+
+    # Form Odd and Even Booklet
+    pdftk A=tmp_OddPart.pdf B=tmp_EvenPart.pdf shuffle Bend-$(( $paper + 1)) A1-${paper} output tmp_OddBooklet.pdf
+    pdftk A=tmp_OddPart.pdf B=tmp_EvenPart.pdf shuffle B1-$paper Aend-$(( ${paper} + 1 )) output tmp_EvenBooklet.pdf
+
+    # Form them into Booklet
+    pdfjam -q tmp_OddBooklet.pdf --nup 2x1 --landscape -o tmp_OddPart.pdf
+    pdfjam -q tmp_EvenBooklet.pdf --nup 2x1 --landscape -o tmp_EvenPart.pdf
+}
+
 # Assign Default Value
 PAPER_NUM_EACH_BOOKLET=5
 VERBOSE="yes"
@@ -77,8 +96,7 @@ if [ $pageRemainder -eq 0 ]; then
 else
     EXTRA_BOOKLET='y'
     totalBookletNumber=$(( $numberOfBooklets + 1 ))
-    echo "Total Number of Booklets = ${numberOfBooklets} + 1"
-    [ -n $VERBOSE ] && echo "Inserting Blank Page to the End."
+    [ $VERBOSE = 'n' ] && echo "Inserting Blank Page to the End."
     numberOfBlankPages=$(( 4 - $pageRemainder % 4 ))
     [ $DEBUG = "y" ] && echo "DEBUG: Blank Page # = ${numberOfBlankPages}"
 
@@ -97,9 +115,11 @@ else
 fi
 
 # Output Basic Info
+echo "----------------------------------------"
 echo "Total Number of Book PDF Pages: " $(( (${totalPDFPageNum} + ${numberOfBlankPages}) / 2 ))
 echo "Total Print Papers Required:    " $(( (${totalPDFPageNum} + ${numberOfBlankPages}) / 4 ))
 echo "Total Number of Booklets:       " ${totalBookletNumber}
+echo "----------------------------------------"
 
 # Split PDF into Booklets
 startPDFPageNum=1
@@ -108,18 +128,8 @@ endPDFPageNum=${bookletTotalPageNum}
 PDFTK_CMD="pdftk"
 for i in `seq 1 $numberOfBooklets`; do
     echo -n "Converting $i Booklets..."
-    # Split PDF into Odd Even parts
-    pdftk "$INPUT_FILE" cat ${startPDFPageNum}-${endPDFPageNum}odd output tmp_OddPart.pdf
-    pdftk "$INPUT_FILE" cat ${startPDFPageNum}-${endPDFPageNum}even output tmp_EvenPart.pdf
 
-    # Form Odd and Even Booklet
-    pdftk A=tmp_OddPart.pdf B=tmp_EvenPart.pdf shuffle Bend-$(( $PAPER_NUM_EACH_BOOKLET + 1)) A1-${PAPER_NUM_EACH_BOOKLET} output tmp_OddBooklet.pdf
-    pdftk A=tmp_OddPart.pdf B=tmp_EvenPart.pdf shuffle B1-$PAPER_NUM_EACH_BOOKLET Aend-$(( ${PAPER_NUM_EACH_BOOKLET} + 1 )) output tmp_EvenBooklet.pdf
-
-    # Form them into Booklet
-    pdfjam -q tmp_OddBooklet.pdf --nup 2x1 --landscape -o tmp_OddPart.pdf
-    pdfjam -q tmp_EvenBooklet.pdf --nup 2x1 --landscape -o tmp_EvenPart.pdf
-
+    createBooklet "$INPUT_FILE" $startPDFPageNum $endPDFPageNum $PAPER_NUM_EACH_BOOKLET
     pdftk A=tmp_OddPart.pdf B=tmp_EvenPart.pdf shuffle A B output Booklet_$i.pdf 
     
     startPDFPageNum=$(( ${startPDFPageNum} + ${bookletTotalPageNum} ))
@@ -132,30 +142,21 @@ done
 if [ $EXTRA_BOOKLET = 'y' ];then
     PAPER_NUM_EACH_BOOKLET=$(( ${numberOfBlankPages} + ${totalPDFPageNum} - $i * ${bookletTotalPageNum} ))
     PAPER_NUM_EACH_BOOKLET=$(( $PAPER_NUM_EACH_BOOKLET / 4 ))
-    i=$i+1
+    i=$(( $i+1 ))
     echo -n "Converting $i Booklets..."
 
-    pdftk "$INPUT_FILE" cat ${startPDFPageNum}-endodd output tmp_OddPart.pdf
-    pdftk "$INPUT_FILE" cat ${startPDFPageNum}-endeven output tmp_EvenPart.pdf
+    createBooklet "$INPUT_FILE" $startPDFPageNum "end" $PAPER_NUM_EACH_BOOKLET
+    pdftk A=tmp_OddPart.pdf B=tmp_EvenPart.pdf shuffle A B output Booklet_$i.pdf 
 
-    # Form Odd and Even Booklet
-    pdftk A=tmp_OddPart.pdf B=tmp_EvenPart.pdf shuffle Bend-$(( $PAPER_NUM_EACH_BOOKLET + 1)) A1-${PAPER_NUM_EACH_BOOKLET} output tmp_OddBooklet.pdf
-    pdftk A=tmp_OddPart.pdf B=tmp_EvenPart.pdf shuffle B1-$PAPER_NUM_EACH_BOOKLET Aend-$(( ${PAPER_NUM_EACH_BOOKLET} + 1 )) output tmp_EvenBooklet.pdf
-
-    # Form them into Booklet
-    pdfjam -q tmp_OddBooklet.pdf --nup 2x1 --landscape -o tmp_OddPart.pdf
-    pdfjam -q tmp_EvenBooklet.pdf --nup 2x1 --landscape -o tmp_EvenPart.pdf
-
-    pdftk A=tmp_OddPart.pdf B=tmp_EvenPart.pdf shuffle A B output ${OUTPUT_FILE}
     PDFTK_CMD=${PDFTK_CMD}" Booklet_$i.pdf"
-    echo "Done.."
+    echo "Done."
 fi
 
-PDFTK_CMD=${PDFTK_CMD}" cat output \"BookBundle_${INPUT_FILE}\""
+PDFTK_CMD=${PDFTK_CMD}" cat output \"${OUTPUT_FILE}\""
 #echo $PDFTK_CMD
 bash -c $PDFTK_CMD
 
-rm tmp_*
+rm tmp_* modified_*
 
 if [ $KEEP_BOOKLET_FLG = 'y' ]; then
     echo "All Booklets Files are deleted. To keep those files, pass -k options."
