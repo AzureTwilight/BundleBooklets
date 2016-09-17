@@ -5,7 +5,7 @@
 # Paper: Actual (Physical) Paper
 # Page:  PDF Page
 
-function usage(){echo "BookletBundle"}
+function usage(){echo "BookletBundle <-povk> Filename.pdf"}
 
 # Assign Default Value
 PAPER_NUM_EACH_BOOKLET=5
@@ -14,11 +14,8 @@ DEBUG="n"
 EXTRA_BOOKLET='y'
 KEEP_BOOKLET_FLG='n'
 
-while getopts ":s:p:o:vk" arg; do
+while getopts ":p:o:vk" arg; do
     case "${arg}" in
-        s)
-            ((s == 45 || s == 90)) || usage
-            ;;
         p)
             PAPER_NUM_EACH_BOOKLET=${OPTARG}
             ;;
@@ -29,6 +26,7 @@ while getopts ":s:p:o:vk" arg; do
 	    ;;
 	k)
 	    KEEP_BOOKLET_FLG='y'
+	    ;;
         *)
             usage
             ;;
@@ -36,8 +34,19 @@ while getopts ":s:p:o:vk" arg; do
 done
 shift $((OPTIND-1))
 
+if [ $# -ne 1 ]; then
+    echo "BookBundle support 1 File at the same time only."
+    exit 1
+fi
+
+# Parsing Input
 INPUT_FILE="$@"
-totalPDFPageNum=$(pdftk "${INPUT_FILE}" dump_data | grep NumberOfPages | awk '{print $NF}')
+if [ -n $OUTPUT_FILE ]; then
+    OUTPUT_FILE="BookBundle_"${INPUT_FILE}
+fi
+
+# Extract Input PDF Info
+totalPDFPageNum=$(pdftk ${INPUT_FILE} dump_data | grep NumberOfPages | awk '{print $NF}')
 [ $DEBUG = "y" ] && echo "DEBUG: total PDF Page # = $totalPDFPageNum "
 pdfPageDimension=$(pdftk ${INPUT_FILE} dump_data | grep PageMediaDimensions | awk -F ': ' '{print $NF}' | tail -n 1 | tr ' ' 'x' )
 [ $DEBUG = "y" ] && echo "DEBUG: PDF Page Dim = $pdfPageDimension "
@@ -48,6 +57,7 @@ else
     exit 1
 fi
 
+# Calculate How many pages each booklet contain
 bookletTotalPageNum=$(( ${PAPER_NUM_EACH_BOOKLET} * 4))
 bookletHalfPageNum=$(( $bookletTotalPageNum / 2))
 [ $DEBUG = "y" ] && echo "DEBUG: Booklet Total Pageg # = ${bookletTotalPageNum} "
@@ -81,7 +91,6 @@ else
 
     CONVERT_CMD="convert $XC_NONE_STR -page $pdfPageDimension tmp_Blank.pdf"
     bash -c "$CONVERT_CMD"
-
 
     pdftk A="$INPUT_FILE" B=tmp_Blank.pdf cat A B output "modified_${INPUT_FILE}"
     INPUT_FILE="modified_${INPUT_FILE}"
@@ -137,7 +146,7 @@ if [ $EXTRA_BOOKLET = 'y' ];then
     pdfjam -q tmp_OddBooklet.pdf --nup 2x1 --landscape -o tmp_OddPart.pdf
     pdfjam -q tmp_EvenBooklet.pdf --nup 2x1 --landscape -o tmp_EvenPart.pdf
 
-    pdftk A=tmp_OddPart.pdf B=tmp_EvenPart.pdf shuffle A B output Booklet_$i.pdf 
+    pdftk A=tmp_OddPart.pdf B=tmp_EvenPart.pdf shuffle A B output ${OUTPUT_FILE}
     PDFTK_CMD=${PDFTK_CMD}" Booklet_$i.pdf"
     echo "Done.."
 fi
