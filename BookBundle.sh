@@ -22,18 +22,19 @@ function createBooklet(){
     pdftk A=tmp_OddPart.pdf B=tmp_EvenPart.pdf shuffle B1-$paper Aend-$(( ${paper} + 1 )) output tmp_EvenBooklet.pdf
 
     # Form them into Booklet
-    pdfjam -q tmp_OddBooklet.pdf --nup 2x1 --landscape -o tmp_OddPart.pdf
-    pdfjam -q tmp_EvenBooklet.pdf --nup 2x1 --landscape -o tmp_EvenPart.pdf
+    pdfjam -q tmp_OddBooklet.pdf --paper $PAPER_SIZE --nup 2x1 --landscape -o tmp_OddPart.pdf
+    pdfjam -q tmp_EvenBooklet.pdf --paper $PAPER_SIZE --nup 2x1 --landscape -o tmp_EvenPart.pdf
 }
 
 # Assign Default Value
+PAPER_SIZE='letter'
 PAPER_NUM_EACH_BOOKLET=5
 VERBOSE="yes"
 DEBUG="n"
 EXTRA_BOOKLET='y'
 KEEP_BOOKLET_FLG='n'
 
-while getopts ":p:o:vk" arg; do
+while getopts ":p:o:P:vk" arg; do
     case "${arg}" in
         p)
             PAPER_NUM_EACH_BOOKLET=${OPTARG}
@@ -48,6 +49,9 @@ while getopts ":p:o:vk" arg; do
 	    ;;
 	t)
 	    # Placeholder for trim option
+	    ;;
+	P)
+	    PAPER_SIZE=${OPTARG}
 	    ;;
         *)
             usage
@@ -93,8 +97,9 @@ pageRemainder=$(( $totalPDFPageNum % $bookletTotalPageNum ))
 if [ $pageRemainder -eq 0 ]; then
     EXTRA_BOOKLET='n' # Extra Booklet refer to the booklet for all remaining pages.
     totalBookletNumber=$numberOfBooklets
+    numberOfBlankPages=0
     [ $VERBOSE = 'y' ] &&  echo "PDF Page # is Divisible by Booklet Page #"
-    echo "Total Number of Booklets = ${numberOfBooklets}"
+    # echo "Total Number of Booklets = ${numberOfBooklets}"
     # Check if need to add Cover and Bottom
 else
     EXTRA_BOOKLET='y'
@@ -119,8 +124,8 @@ fi
 
 # Output Basic Info
 echo "----------------------------------------"
-echo "Total Number of Book PDF Pages: " $(( (${totalPDFPageNum} + ${numberOfBlankPages}) / 2 ))
-echo "Total Print Papers Required:    " $(( (${totalPDFPageNum} + ${numberOfBlankPages}) / 4 ))
+echo "Total Number of Book PDF Pages: "$(((${totalPDFPageNum} + ${numberOfBlankPages})/2))
+echo "Total Print Papers Required:    "$(( (${totalPDFPageNum} + ${numberOfBlankPages}) / 4 ))
 echo "Total Number of Booklets:       " ${totalBookletNumber}
 echo "----------------------------------------"
 
@@ -143,7 +148,7 @@ for i in `seq 1 $numberOfBooklets`; do
 done
 
 if [ $EXTRA_BOOKLET = 'y' ];then
-    PAPER_NUM_EACH_BOOKLET=$(( ${numberOfBlankPages} + ${totalPDFPageNum} - $i * ${bookletTotalPageNum} ))
+    PAPER_NUM_EACH_BOOKLET=$(( ${numberOfBlankPages} + ${totalPDFPageNum} - ${numberOfBooklets} * ${bookletTotalPageNum} ))
     PAPER_NUM_EACH_BOOKLET=$(( $PAPER_NUM_EACH_BOOKLET / 4 ))
     i=$(( $i+1 ))
     echo -n "Converting $i Booklets..."
@@ -159,7 +164,7 @@ PDFTK_CMD=${PDFTK_CMD}" cat output \"${OUTPUT_FILE}\""
 #echo $PDFTK_CMD
 bash -c $PDFTK_CMD
 
-rm tmp_* modified_*
+rm -f "tmp_*" "modified_*.pdf"
 
 if [ $KEEP_BOOKLET_FLG = 'y' ]; then
     echo "All Booklets Files are deleted. To keep those files, pass -k options."
